@@ -19,28 +19,28 @@ namespace Nixin
         {
             base.SetLocalText();
 
-            var hostButtonText = HostButton.GetComponentInAllChildren<Text>();
+            Text hostButtonText = HostButton.GetComponentInAllChildren<Text>();
             if( hostButtonText != null )
             {
                 hostButtonText.text = ContainingWorld.LocalisationSystem.GetLocalString( 
                     LocalisationIds.MainMenu.Host );
             }
 
-            var gameListButtonText = GameListButton.GetComponentInAllChildren<Text>();
+            Text gameListButtonText = GameListButton.GetComponentInAllChildren<Text>();
             if( gameListButtonText != null )
             {
                 gameListButtonText.text = ContainingWorld.LocalisationSystem.GetLocalString( 
                     LocalisationIds.MainMenu.GameList );
             }
 
-            var settingsButtonText = SettingsButton.GetComponentInAllChildren<Text>();
+            Text settingsButtonText = SettingsButton.GetComponentInAllChildren<Text>();
             if( settingsButtonText != null )
             {
                 settingsButtonText.text = ContainingWorld.LocalisationSystem.GetLocalString( 
                     LocalisationIds.MainMenu.Settings );
             }
 
-            var exitButtonText = ExitButton.GetComponentInAllChildren<Text>();
+            Text exitButtonText = ExitButton.GetComponentInAllChildren<Text>();
             if( exitButtonText != null )
             {
                 exitButtonText.text = ContainingWorld.LocalisationSystem.GetLocalString( 

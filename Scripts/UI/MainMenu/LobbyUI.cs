@@ -160,10 +160,10 @@ namespace Nixin
             if( !ContainingWorld.NetworkSystem.IsAuthoritative )
             {
                 // Check to see if we have to rebuild the game modes.
-                var gameState = ContainingWorld.GameState as MainMenuGameState;
+                MainMenuGameState gameState = ContainingWorld.GameState as MainMenuGameState;
                 if( gameState != null )
                 {
-                    var newMode   = gameState.NetworkGameMetaData.GameMap.Mode;
+                    GameModeChunk newMode   = gameState.NetworkGameMetaData.GameMap.Mode;
 
                     if( oldMode != newMode )
                     {
@@ -247,6 +247,7 @@ namespace Nixin
 
         private GameModeChunk              oldMode              = null;
 
+
         private void OnStartGameButtonPressed()
         {
             var gameState = ContainingWorld.GameState as MainMenuGameState;
@@ -261,15 +262,7 @@ namespace Nixin
 
         private void OnDisconnectButtonPressed()
         {
-            if( ContainingWorld.NetworkSystem.IsServer )
-            {
-                ContainingWorld.ShutdownServer();
-                ContainingWorld.NetworkSystem.StartClient();
-            }
-            else
-            {
-                ContainingWorld.DisconnectFromServer();
-            }
+            ContainingWorld.NetworkSystem.Disconnect();
             ClearPlayerEntryList();
         }
 
@@ -326,43 +319,37 @@ namespace Nixin
         private void BuildGameModeOptions()
         {
             ClearGameModeOptions();
-            var state = ContainingWorld.GameState as MainMenuGameState;
-            if( state == null )
-            {
-                return;
-            }
+            MainMenuGameState state = ContainingWorld.GameState as MainMenuGameState;
+            GameModeChunk      mode = state.NetworkGameMetaData.GameMap.Mode;
 
-            var mode = state.NetworkGameMetaData.GameMap.Mode;
-            if( mode == null )
-            {
-                return;
-            }
-
-            // Build game var uis.
-            for( int i = 0; i < mode.GameVarDelcs.Count; ++i )
-            {
-                var         decl        = mode.GameVarDelcs[i];
-                GameVarUI   gameVarUI   = null;
-
-                if( decl is BoolGameVarDeclAttribute )
+            if( mode != null )
+            { 
+                // Build game var uis.
+                for( int i = 0; i < mode.GameVarDelcs.Count; ++i )
                 {
-                    gameVarUI = ( GameVarUI )ContainingWorld.InstantiateUIActor( boolGameVarUIPrefab, null );
-                }
-                else if( decl is IntGameVarDeclAttribute )
-                {
-                    gameVarUI = ( GameVarUI )ContainingWorld.InstantiateUIActor( intGameVarUIPrefab, null );
-                }
-                else if( decl is FloatGameVarDeclAttribute )
-                {
-                    gameVarUI = ( GameVarUI )ContainingWorld.InstantiateUIActor( floatGameVarUIPrefab, null );
-                }
+                    GameVarDeclAttribute         decl        = mode.GameVarDelcs[i];
+                    GameVarUI                    gameVarUI   = null;
 
-                gameVarUI.SetGameVarData( decl, state.NetworkGameMetaData.GameMap.Vars[i] );
-                gameVarUI.transform.localPosition = Vector3.zero;
-                gameVarUI.transform.localScale    = Vector3.one;
-                gameVarUI.transform.SetParent( gameOptionsListPanel, false );
+                    if( decl is BoolGameVarDeclAttribute )
+                    {
+                        gameVarUI = ( GameVarUI )ContainingWorld.InstantiateUIActor( boolGameVarUIPrefab, null );
+                    }
+                    else if( decl is IntGameVarDeclAttribute )
+                    {
+                        gameVarUI = ( GameVarUI )ContainingWorld.InstantiateUIActor( intGameVarUIPrefab, null );
+                    }
+                    else if( decl is FloatGameVarDeclAttribute )
+                    {
+                        gameVarUI = ( GameVarUI )ContainingWorld.InstantiateUIActor( floatGameVarUIPrefab, null );
+                    }
 
-                gameVarUIs.Add( gameVarUI );
+                    gameVarUI.SetGameVarData( decl, state.NetworkGameMetaData.GameMap.Vars[i] );
+                    gameVarUI.transform.localPosition = Vector3.zero;
+                    gameVarUI.transform.localScale    = Vector3.one;
+                    gameVarUI.transform.SetParent( gameOptionsListPanel, false );
+
+                    gameVarUIs.Add( gameVarUI );
+                }
             }
         }
 
@@ -380,17 +367,17 @@ namespace Nixin
 
         private void OnMapDropDownValueChanged( int i )
         {
-            if( ContainingWorld.NetworkSystem.IsServer )
+            if( ContainingWorld.NetworkSystem.IsAuthoritative )
             {
                 SetMapAndMode();
-                var state = ContainingWorld.GameState as MainMenuGameState;
+                MainMenuGameState state = ContainingWorld.GameState as MainMenuGameState;
             }
         }
 
 
         private void OnGameModeDropDownValueChanged( int i )
         {
-            if( ContainingWorld.NetworkSystem.IsServer )
+            if( ContainingWorld.NetworkSystem.IsAuthoritative )
             {
                 SetMapAndMode();
                 BuildMapDropDown();
@@ -401,7 +388,7 @@ namespace Nixin
 
         private void SetMapAndMode()
         {
-            var state = ContainingWorld.GameState as MainMenuGameState;
+            MainMenuGameState state = ContainingWorld.GameState as MainMenuGameState;
             if( gameModeDropDown.options.Count <= 0 )
             {
                 state.NetworkGameMetaData.GameMap.Mode = null;
@@ -454,6 +441,9 @@ namespace Nixin
                     OnPlayerAdded( state.PlayerStats[i] );
                 }
             }
+
+            MainMenuGameState mainMenuState = ( MainMenuGameState )state;
+            oldMode = mainMenuState.NetworkGameMetaData.GameMap.Mode;
         }
 
 

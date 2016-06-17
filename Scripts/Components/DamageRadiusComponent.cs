@@ -74,7 +74,7 @@ namespace Nixin
         }
 
 
-#if UNITY_EDITOR
+#if !NSHIPPING
         private void OnDrawGizmosSelected()
         {
             var oldColour = Gizmos.color;

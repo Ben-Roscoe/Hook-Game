@@ -186,16 +186,9 @@ namespace Nixin
 
         public virtual void EndPostMatch()
         {
-            if( ContainingWorld.NetworkSystem.IsServer )
-            {
-                ContainingWorld.ShutdownServer();
-            }
-            else
-            {
-                ContainingWorld.DisconnectFromServer();
-            }
+            ContainingWorld.NetworkSystem.Disconnect();
 
-            var world = ( HookGameWorld )ContainingWorld;
+            HookGameWorld world = ( HookGameWorld )ContainingWorld;
             world.LoadMap( world.MainMenuGameMap );
         }
 

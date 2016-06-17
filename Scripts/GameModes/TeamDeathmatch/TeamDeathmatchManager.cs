@@ -6,9 +6,9 @@ using UnityEngine;
 
 namespace Nixin
 {
-    [IntGameVarDecl( "TargetKills", LocalisationIds.TeamDeathmatch.TargetKillsGameVarName, 1, 200, 5 ),
-     FloatGameVarDecl( "DamageMultiplier", LocalisationIds.TeamDeathmatch.DamageMultiplierGameVarName,  0.1f, 1000.0f, 1.0f ),
-     BoolGameVarDecl( "BoolTest", LocalisationIds.MainMenu.CurrentPingTitle, false )]
+    [IntGameVarDecl( 0, "TargetKills", LocalisationIds.TeamDeathmatch.TargetKillsGameVarName, 1, 200, 5 ),
+     FloatGameVarDecl( 1, "DamageMultiplier", LocalisationIds.TeamDeathmatch.DamageMultiplierGameVarName,  0.1f, 1000.0f, 1.0f ),
+     BoolGameVarDecl( 2, "BoolTest", LocalisationIds.MainMenu.CurrentPingTitle, false )]
     public class TeamDeathmatchManager : HookGameMatchManager
     {
 

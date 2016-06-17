@@ -10,8 +10,12 @@ using UnityEngine.Assertions;
 
 namespace Nixin
 {
-
-
+    public enum NetType
+    {
+        Unconnected,
+        Server,
+        Client,
+    }
 
     public enum DataMessageType
     {
@@ -28,82 +32,83 @@ namespace Nixin
         // Public:
 
 
-        public NetworkSystem( World containingWorld, string appIdentifier ) : base( containingWorld )
+        public NetworkSystem( World containingWorld, string appIdentifier, int port ) : base( containingWorld )
         {
             netConfig           = new NetPeerConfiguration( appIdentifier );
+            netConfig.Port      = port;
+            
+            receivedSnapshots   = new SnapshotBuffer();
+            currentSnapshot     = receivedSnapshots.CurrentSnapshot;
+            nextSnapshot        = receivedSnapshots.CurrentSnapshot;
 
-            receivedSnapshots           = new SnapshotBuffer();
-            currentSnapshot             = receivedSnapshots.CurrentSnapshot;
-            nextSnapshot                = receivedSnapshots.CurrentSnapshot;
-
-            netPeer = new NetServer( netConfig );
-        }
-
-
-        public void StartServer( int port )
-        {
-            Assert.IsTrue( !IsConnected );
             netConfig.EnableMessageType( NetIncomingMessageType.DiscoveryRequest );
-            netPeer = new NetServer( netConfig );
-            netConfig.Port  = port;
-            netPeer.Start();
+            netConfig.EnableMessageType( NetIncomingMessageType.DiscoveryResponse );
+            netConfig.EnableMessageType( NetIncomingMessageType.ConnectionApproval );
+            netConfig.EnableMessageType( NetIncomingMessageType.StatusChanged );
+            netConfig.EnableMessageType( NetIncomingMessageType.Data );
+            netConfig.AcceptIncomingConnections = true;
 
-            // Reset all actor ids to match the new one we've generated.
-            for( int i = 0; i < ContainingWorld.Actors.Count; ++i )
-            {
-                if( ContainingWorld.Actors[i] == null )
-                {
-                    continue;
-                }
-                ContainingWorld.Actors[i].NetworkOwner = Id;
-            }
+            // TODO: Shouldn't be here probably.
+            //netConfig.SimulatedRandomLatency    = 0.050f;
+            //netConfig.SimulatedMinimumLatency   = 0.100f;
+           // netConfig.SimulatedDuplicatesChance = 0.25f;
+           // netConfig.SimulatedLoss             = 0.25f;
+
+            // TODO: Maybe this can be moved elsewhere?
+            netPeer = new NetPeer( netConfig );
+
+            netType = NetType.Unconnected;
+
+            StartPeer();
         }
 
 
-        public void StartClient()
+        public void StartPeer()
         {
-            Assert.IsTrue( !IsConnected );
-            netConfig.EnableMessageType( NetIncomingMessageType.DiscoveryResponse );
-            netPeer = new NetClient( netConfig );
+            Assert.IsTrue( netType == NetType.Unconnected, "NetType must be unconnected to start a peer." );
             netPeer.Start();
+        }
 
-            // Reset all actor ids to match the new one we've generated.
-            for( int i = 0; i < ContainingWorld.Actors.Count; ++i )
-            {
-                if( ContainingWorld.Actors[i] == null )
-                {
-                    continue;
-                }
-                ContainingWorld.Actors[i].NetworkOwner = Id;
-            }
+
+        public void StartServer()
+        {
+            Assert.IsTrue( netType == NetType.Unconnected, "Must be unconnected to start a server." );
+            netType = NetType.Server;
+
+            timeTilNextSend = NetworkSendPeriod;
         }
 
 
         public void ConnectToServer( ConnectToServerRequest request )
         {
-            Assert.IsTrue( !IsConnected );
-
-            netPeer     = new NetClient( netConfig );
-            netPeer.Start();
+            Assert.IsTrue( netType == NetType.Unconnected, "This peer is either a server or is connected to one." );
+            
             request.Connection = netPeer.Connect( request.Address, request.Port );
             connectToServerRequests.Add( request );
         }
 
 
-        public void DisconnectFromServer()
+        public void Disconnect()
         {
-            Assert.IsTrue( IsConnected && IsClient );
-            ( ( NetClient )netPeer ).Disconnect( "Cya" );
+            if( netType == NetType.Client )
+            {
+                Assert.IsTrue( netType == NetType.Client, "NetType must be Client in order to disconnect from a server." );
+                netPeer.Connections[0].Disconnect( "Cya" );
+            }
+            else if( netType == NetType.Server )
+            {
+                for( int i = 0; i < netPeer.Connections.Count; ++i )
+                {
+                    netPeer.Connections[i].Disconnect( "Cya" );
+                }
+            }
+            netType = NetType.Unconnected;
         }
 
 
         public void Shutdown()
         {
-            if( NetPeer != null )
-            {
-                NetPeer.Shutdown( "Cya" );
-                netConfig = new NetPeerConfiguration( NetConfig.AppIdentifier );
-            }
+            NetPeer.Shutdown( "Cya" );
         }
 
 
@@ -127,9 +132,9 @@ namespace Nixin
 
             // Parse parameters to our message format.
             List<RPCParameter> rpcParameters = new List<RPCParameter>( parameters.Length );
-            foreach( var parameter in parameters )
+            foreach( object parameter in parameters )
             {
-                var parameterId = RPCCall.GetParameterIdFromData( parameter );
+                RPCParameterId parameterId = RPCCall.GetParameterIdFromData( parameter );
                 Assert.IsTrue( parameterId != RPCParameterId.Invalid );
 
                 rpcParameters.Add( new RPCParameter( parameter, parameterId ) );
@@ -144,7 +149,7 @@ namespace Nixin
         {
             Assert.IsTrue( IsAuthoritative );
 
-            foreach( var relevency in destination.Relevancies )
+            foreach( Relevancy relevency in destination.Relevancies )
             {
                 if( relevency.Type == RelevancyType.Active && !relevency.Client.IsLoadingCurrentMap )
                 {
@@ -162,7 +167,8 @@ namespace Nixin
             NetOutgoingMessage message = CreateNewDataMessage( DataMessageType.ServerCommand );
             call.WriteRPC( message );
 
-            NetPeer.SendMessage( message, ServerConnection, NetDeliveryMethod.Unreliable );
+            // TODO: Probably don't want to send messages for each command like this.
+            NetPeer.SendMessage( message, ServerConnection, NetDeliveryMethod.ReliableOrdered );
         }
 
 
@@ -178,7 +184,7 @@ namespace Nixin
             bufferedRPCCalls.Remove( previous );
             bufferedRPCCalls.Add( call );
 
-            var destinationActor = ContainingWorld.Actors[call.DestinationActorId];
+            Actor destinationActor = ContainingWorld.Actors[call.DestinationActorId];
             for( int i = 0; i < destinationActor.Relevancies.Count; ++i )
             {
                 if( destinationActor.Relevancies[i].Type == RelevancyType.Deactive )
@@ -202,7 +208,7 @@ namespace Nixin
             // Remove the call if there is one.
             bufferedRPCCalls.Remove( call );
 
-            var destinationActor = ContainingWorld.Actors[call.DestinationActorId];
+            Actor destinationActor = ContainingWorld.Actors[call.DestinationActorId];
             for( int i = 0; i < destinationActor.Relevancies.Count; ++i )
             {
                 if( destinationActor.Relevancies[i].Type == RelevancyType.Deactive )
@@ -247,7 +253,7 @@ namespace Nixin
                 return;
             }
 
-            var destinationActor = ContainingWorld.Actors[component.Owner.Id];
+            Actor destinationActor = ContainingWorld.Actors[component.Owner.Id];
             if( destinationActor == null )
             {
                 return;
@@ -265,7 +271,7 @@ namespace Nixin
 
         public void CreateRelevancy( ClientState client, Actor actor, RelevancyType type )
         {
-            var relevancy = new Relevancy( client, actor, type );
+            Relevancy relevancy = new Relevancy( client, actor, type );
             client.Relevancies.Add( relevancy );
             actor.Relevancies.Add( relevancy );
         }
@@ -275,58 +281,6 @@ namespace Nixin
         {
             client.Relevancies.RemoveAll( x => x.Actor == actor );
             actor.Relevancies.RemoveAll( x => x.Client == client );
-        }
-
-
-        public void CheckForSnapshotActivation()
-        {
-            for( int i = receivedSnapshots.Snapshots.Length - 1; i >= 0; --i )
-            {
-                if( receivedSnapshots.Snapshots[i].Timestamp <= CurrentClientInterpolationTime && receivedSnapshots.Snapshots[i].SnapshotNum > currentClientStep )
-                {
-                    // This is our new current snapshot. Invoke RPCs.
-                    var newest          = receivedSnapshots.Snapshots[i];
-                    currentClientStep = newest.SnapshotNum;
-                    newest.RPCCalls.ForEach( x => InvokeRPCCall( x.call ) );
-
-                    currentSnapshot = newest;
-                    nextSnapshot = receivedSnapshots.Snapshots[Mathf.Clamp( i - 1, 0, receivedSnapshots.Snapshots.Length - 1 )];
-
-                    // Send out actor states.
-                    newest.Buffer.Position       = 0;
-                    for( int s = 0; s < newest.ActorStates.Count; ++s )
-                    {
-                        var actor   = ContainingWorld.GetReplicatedActor( newest.ActorStates[s].ActorId );
-
-                        // Read the current state of the world.
-                        actor.ReadSnapshot( newest.Buffer, false );
-                        newest.Buffer.ReadPadBits();
-                    }
-                    for( int s = 0; s < nextSnapshot.ActorStates.Count; ++s )
-                    {
-                        var actor   = ContainingWorld.GetReplicatedActor( nextSnapshot.ActorStates[s].ActorId );
-                        if( actor == null )
-                        {
-                            continue;
-                        }
-
-                        nextSnapshot.Buffer.Position = nextSnapshot.ActorStates[s].Start;
-
-                        // Peek the future state of the world for interpolation.
-                        actor.ReadSnapshot( nextSnapshot.Buffer, true );
-                    }
-
-                    // Call post snapshot initialise.
-                    for( int a = 0; a < ContainingWorld.LocalActorStart; ++a )
-                    {
-                        if( ContainingWorld.Actors[a] != null && !ContainingWorld.Actors[a].PostSnapshotInitialised )
-                        {
-                            ContainingWorld.Actors[a].OnActorInitialisePostSnapshot();
-                        }
-                    }
-                    // NDebug.PrintSubsystemDebug( NDebug.DebugSubsystem.Networking, Time.time +  " Snapshot activated " + ( CurrentClientInterpolationTime - receivedSnapshots.Snapshots[i].Timestamp ) + "ms late" );
-                }
-            }
         }
 
 
@@ -340,6 +294,19 @@ namespace Nixin
         }
 
 
+        public void Update()
+        {
+            if( IsAuthoritative )
+            {
+                ExecuteServerCommands();
+            }
+            else
+            {
+                ProcessSnapshots();
+            }
+        }
+
+
         public void ReadUpdate()
         {
             if( NetPeer == null )
@@ -350,43 +317,48 @@ namespace Nixin
         }
 
 
-        public void SendUpdate()
+        public void TrySendUpdate( float deltaTime )
         {
-            if( NetPeer == null )
+            if( NetPeer == null || netType != NetType.Server )
             {
                 return;
             }
 
-            // Copy the world to each client's snapshot.
-            for( int i = 0; i < clients.Count; ++i )
+            timeTilNextSend -= deltaTime;
+            if( timeTilNextSend <= 0.0 )
             {
-                clients[i].SnapshotBuffer.CurrentSnapshot.CopyClientWorldState( clients[i], ContainingWorld.LocalActorStart );
-                SendSnapshot( clients[i] );
-                clients[i].SnapshotBuffer.NewSnapshot( networkStep + 1 );
-            }
+                // Copy the world to each client's snapshot.
+                for( int i = 0; i < clients.Count; ++i )
+                {
+                    clients[i].SnapshotBuffer.CurrentSnapshot.CopyClientWorldState( clients[i], ContainingWorld.LocalActorStart );
+                    SendSnapshot( clients[i] );
+                    clients[i].SnapshotBuffer.NewSnapshot( networkStep + 1 );
+                }
 
-            ++networkStep;
+                ++networkStep;
+                timeTilNextSend = NetworkSendPeriod;
+            }
         }
 
 
         public NetOutgoingMessage CreateNewDataMessage( DataMessageType messageType )
         {
-            Assert.IsTrue( netPeer != null && netPeer.Status == NetPeerStatus.Running );
-
-            var message = netPeer.CreateMessage();
+            NetOutgoingMessage message = netPeer.CreateMessage();
             message.Write( ( byte )messageType );
-
             return message;
         }
 
 
         public ClientState GetClientStateFromId( long id )
         {
-            if( NetPeer == null )
-            {
-                return null;
-            }
+            Assert.IsTrue( netType == NetType.Server );
             return clients.Find( x => x.Id == id );
+        }
+
+
+        public ClientState GetClientStateFromConnection( NetConnection connection )
+        {
+            return GetClientStateFromId( connection.RemoteUniqueIdentifier );
         }
 
 
@@ -395,7 +367,8 @@ namespace Nixin
             get
             {
                 // The current time the client is running at.
-                return ( NetTime.Now - ( interpolationBufferLegnth ) * NetworkSendPeriod ) - ( ServerConnection == null ? 0.0 : ServerConnection.AverageRoundtripTime / 2.0 );
+                return ( NetTime.Now - ( interpolationBufferLegnth ) * NetworkSendPeriod )
+                     - ( ServerConnection == null ? 0.0 : ServerConnection.AverageRoundtripTime / 2.0 );
             }
         }
 
@@ -431,24 +404,29 @@ namespace Nixin
         {
             get
             {
-                if( !IsServer )
+                if( netType == NetType.Client )
                 {
-                    return ( ( NetClient )NetPeer ).ServerConnection;
+                    return NetPeer.Connections[0];
                 }
                 return null;
             }
         }
 
 
-        public long ServerId
+        public long AuthorityId
         {
             get
             {
-                if( NetPeer == null || ( IsClient && !IsConnected ) )
+                long ret = 0;
+                if( netType == NetType.Server || netType == NetType.Unconnected )
                 {
-                    return 0;
+                    ret = NetPeer.UniqueIdentifier;
                 }
-                return IsServer ? NetPeer.UniqueIdentifier : ( ( NetClient )NetPeer ).ServerConnection.RemoteUniqueIdentifier;
+                else
+                {
+                    ret = NetPeer.Connections[0].RemoteUniqueIdentifier;
+                }
+                return ret;
             }
         }
 
@@ -471,38 +449,20 @@ namespace Nixin
         }
 
 
-        public bool IsConnected
-        {
-            get
-            {
-                return NetPeer.ConnectionsCount > 0;
-            }
-        }
-
-
         public bool IsAuthoritative
         {
             get
             {
-                return NetPeer == null || NetPeer.Status != NetPeerStatus.Running || !IsConnected || NetPeer is NetServer || performingPreConnection;
+                return netType == NetType.Unconnected || netType == NetType.Server;
             }
         }
 
 
-        public bool IsServer
+        public NetType CurrentNetType
         {
             get
             {
-                return NetPeer is NetServer;
-            }
-        }
-
-
-        public bool IsClient
-        {
-            get
-            {
-                return !IsServer;
+                return netType;
             }
         }
 
@@ -528,10 +488,10 @@ namespace Nixin
         // Private:
 
 
+        private NetType                     netType     = NetType.Unconnected;
         private NetPeer                     netPeer     = null;
         private NetPeerConfiguration        netConfig   = null;
-
-        private bool                        performingPreConnection         = false;
+        
         private double                      networkSendRate                 = 20.0;
         private int                         interpolationBufferLegnth       = 2;
 
@@ -541,6 +501,7 @@ namespace Nixin
 
         private int                         networkStep                     = 0;
         private int                         currentClientStep               = -1;
+        private double                      timeTilNextSend                 = 0.0f;
 
         // Client only stuff.
         private SnapshotBuffer              receivedSnapshots               = null;
@@ -550,26 +511,29 @@ namespace Nixin
         private int                         receivedSnapshotCount           = 0;
 
         private List<NetIncomingMessage>    incomingMsgs                    = new List<NetIncomingMessage>();
-
         private List<RPCCall>               serverCommandsToExecute         = new List<RPCCall>();
-
         private List<ConnectToServerRequest> connectToServerRequests        = new List<ConnectToServerRequest>();
 
 
         private void OnClientConnected( NetConnection connection )
         {
+            Assert.IsTrue( netType == NetType.Server, "Non-server received client connected event." );
+
             // Create the new client state.
-            var client = new ClientState( connection );
+            ClientState client = new ClientState( connection );
             clients.Add( client );
 
             CreateInitialSnapshot( client );
-            ContainingWorld.OnClientConnected( client );
+
+            ContainingWorld.OnConnected( connection );
         }
 
 
         private void OnClientDisconnect( NetConnection connection )
         {
-            var client = GetClientFromConnection( connection );
+            Assert.IsTrue( netType == NetType.Server, "Non-server received client disconnected event." );
+
+            ClientState client = GetClientFromConnection( connection );
 
             for( int i = 0; i < ContainingWorld.LocalActorStart; ++i )
             {
@@ -578,40 +542,34 @@ namespace Nixin
                     RemoveRelevancy( client, ContainingWorld.Actors[i] );
                 }
             }
-            ContainingWorld.OnClientDisconnect( client );
+            ContainingWorld.OnDisconnected( connection );
 
             // Remove the client state. It's only valid for this session.
             clients.RemoveAll( x => x.NetConnection == connection );
         }
 
 
-        private void OnPreConnectToServer( NetConnection serverConnection )
-        {
-            ContainingWorld.OnPreConnectToServer( serverConnection );
-        }
-
-
         private void OnConnectToServer( NetConnection serverConnection )
         {
-            ContainingWorld.OnConnectToServer( serverConnection );
+            Assert.IsTrue( netType == NetType.Unconnected, "Non-unconnected received connected to server event." );
+            ContainingWorld.OnConnected( serverConnection );
+
+            netType = NetType.Client;
         }
 
 
         private void OnDisconnectFromServer( NetConnection serverConnection )
         {
-            ContainingWorld.OnDisconnectFromServer( serverConnection );
-        }
+            Assert.IsTrue( netType == NetType.Client, "Non-client received diconnected from server event." );
+            ContainingWorld.OnDisconnected( serverConnection );
 
-
-        private void OnStartRunning( NetConnection serverConnection )
-        {
-
+            netType = NetType.Unconnected;
         }
 
 
         private void CreateInitialSnapshot( ClientState client )
         {
-            if( IsClient )
+            if( netType != NetType.Server )
             {
                 return;
             }
@@ -624,7 +582,6 @@ namespace Nixin
             }
 
             // Add all actors that accept new relevancies as relevant to this client.
-            //CreateRelevancy( client, ContainingWorld, RelevancyType.Active );
             for( int i = 0; i < ContainingWorld.LocalActorStart; ++i )
             {
                 if( ContainingWorld.Actors[i] != null && ContainingWorld.Actors[i].AcceptsNewConnections )
@@ -637,7 +594,7 @@ namespace Nixin
 
         private void SendSnapshot( ClientState client )
         {
-            if( IsClient )
+            if( netType != NetType.Server )
             {
                 return;
             }
@@ -683,15 +640,16 @@ namespace Nixin
                 {
                     ProcessDebugMessage( incomingMsgs[i] );
                 }
-                else if( IsServer && incomingMsgs[i].MessageType == NetIncomingMessageType.ConnectionApproval )
+                else if( incomingMsgs[i].MessageType == NetIncomingMessageType.ConnectionApproval )
                 {
+                    // TODO: More logic here to determine whether we should approve or not.
                     incomingMsgs[i].SenderConnection.Approve();
                 }
-                else if( incomingMsgs[i].MessageType == NetIncomingMessageType.DiscoveryRequest )
+                else if( netType == NetType.Server && incomingMsgs[i].MessageType == NetIncomingMessageType.DiscoveryRequest )
                 {
                     ContainingWorld.ReadNetDiscoveryRequest( incomingMsgs[i] );
                 }
-                else if( incomingMsgs[i].MessageType == NetIncomingMessageType.DiscoveryResponse )
+                else if( netType == NetType.Unconnected && incomingMsgs[i].MessageType == NetIncomingMessageType.DiscoveryResponse )
                 {
                     ContainingWorld.ReadNetDiscoveryResponse( incomingMsgs[i] );
                 }
@@ -702,21 +660,16 @@ namespace Nixin
         private void ProcessStatusChangedMessage( NetIncomingMessage message )
         {
             // Read the new status for this connection.
-            var status = ( NetConnectionStatus )message.ReadByte();
+            NetConnectionStatus status = ( NetConnectionStatus )message.ReadByte();
 
             if( status == NetConnectionStatus.Connected )
             {
-                if( IsServer )
+                if( netType == NetType.Server )
                 {
                     OnClientConnected( message.SenderConnection );
                 }
-                else
+                else if( netType == NetType.Unconnected )
                 {
-                    // Allow the client to respond as an authority one more time.
-                    performingPreConnection = true;
-                    OnPreConnectToServer( message.SenderConnection );
-                    performingPreConnection = false;
-
                     OnConnectToServer( message.SenderConnection );
                     for( int i = 0; i < connectToServerRequests.Count; ++i )
                     {
@@ -731,11 +684,11 @@ namespace Nixin
             }
             else if( status == NetConnectionStatus.Disconnected )
             {
-                if( IsServer )
+                if( netType == NetType.Server )
                 {
                     OnClientDisconnect( message.SenderConnection );
                 }
-                else
+                else if( netType == NetType.Client )
                 {
                     OnDisconnectFromServer( message.SenderConnection );
                 }
@@ -746,13 +699,13 @@ namespace Nixin
         private void ProcessDataMessage( NetIncomingMessage msg )
         {
             // Data message, read the 8-bit sub type.
-            var type = ( DataMessageType )msg.ReadByte();
+            DataMessageType type = ( DataMessageType )msg.ReadByte();
             
             if( IsAuthoritative )
             {
                 if( type == DataMessageType.SnapshotACK )
                 {
-                    var client = GetClientFromConnection( msg.SenderConnection );
+                    ClientState client = GetClientFromConnection( msg.SenderConnection );
                     if( client != null )
                     {
                         int num         = msg.ReadInt32();
@@ -765,11 +718,11 @@ namespace Nixin
                 }
                 else if( type == DataMessageType.ServerCommand )
                 {
-                    var call = new RPCCall( msg );
+                    RPCCall call = new RPCCall( msg );
                     serverCommandsToExecute.Add( call );
                 }
             }
-            if( IsClient && type == DataMessageType.Snapshot )
+            if( netType == NetType.Client && type == DataMessageType.Snapshot )
             {
                 int num         = msg.ReadInt32();
 
@@ -779,20 +732,17 @@ namespace Nixin
                     return;
                 }
 
-                int deltaFrom   = msg.ReadInt32();
-                var last        = receivedSnapshots.GetSnapshotWithNum( deltaFrom );
-                var newSnapshot = new Snapshot( msg, last, num );
+                int      deltaFrom   = msg.ReadInt32();
+                Snapshot last        = receivedSnapshots.GetSnapshotWithNum( deltaFrom );
+                Snapshot newSnapshot = new Snapshot( msg, last, num );
                 if( last.SnapshotNum <= lastAckdSnapshot )
                 {
                     newSnapshot.RemoveRPCsFrom( lastAckdSnapshot );
                 }
 
                 ContainingWorld.OnSnapshotArrive( newSnapshot );
-
                 receivedSnapshots.AddSnapshot( newSnapshot );
-
                 SendSnapshotACK( newSnapshot );
-
                 ++receivedSnapshotCount;
             }
         }
@@ -805,20 +755,68 @@ namespace Nixin
         }
 
 
+        private void ProcessSnapshots()
+        {
+            for( int i = receivedSnapshots.Snapshots.Length - 1; i > 0; --i )
+            {
+                if( receivedSnapshots.Snapshots[i].Timestamp <= CurrentClientInterpolationTime
+                    && receivedSnapshots.Snapshots[i].SnapshotNum > currentClientStep )
+                {
+                    // This is our new current snapshot. Invoke RPCs.
+                    Snapshot newest          = receivedSnapshots.Snapshots[i];
+                    currentClientStep = newest.SnapshotNum;
+                    for( int c = 0; c < newest.RPCCalls.Count; ++c )
+                    {
+                        InvokeRPCCall( newest.RPCCalls[c].call );
+                    }
+
+                    currentSnapshot = newest;
+                    nextSnapshot = receivedSnapshots.Snapshots[i - 1];
+
+                    // Read the snapshot for the current time.
+                    newest.Buffer.Position = 0;
+                    for( int s = 0; s < newest.ActorStates.Count; ++s )
+                    {
+                        Actor actor   = ContainingWorld.GetReplicatedActor( newest.ActorStates[s].ActorId );
+
+                        // Read the current state of the world.
+                        actor.ReadSnapshot( newest.Buffer, false );
+                        newest.Buffer.ReadPadBits();
+                    }
+
+                    // Peek the future state of the world for interpolation.
+                    for( int s = 0; s < nextSnapshot.ActorStates.Count; ++s )
+                    {
+                        Actor actor   = ContainingWorld.GetReplicatedActor( nextSnapshot.ActorStates[s].ActorId );
+                        if( actor == null )
+                        {
+                            continue;
+                        }
+
+                        nextSnapshot.Buffer.Position = nextSnapshot.ActorStates[s].Start;
+                        actor.ReadSnapshot( nextSnapshot.Buffer, true );
+                    }
+
+                    // Post snapshot initialisation.
+                    for( int a = 0; a < ContainingWorld.LocalActorStart; ++a )
+                    {
+                        if( ContainingWorld.Actors[a] != null && !ContainingWorld.Actors[a].PostSnapshotInitialised )
+                        {
+                            ContainingWorld.Actors[a].OnActorInitialisePostSnapshot();
+                        }
+                    }
+                }
+            }
+        }
+
+
         private void InvokeRPCCall( RPCCall call )
         {
-            if( ContainingWorld == null )
-            {
-                return;
-            }
-
             // Find the actor the call is for.
             Actor actor = null;
             actor = ContainingWorld.GetReplicatedActor( call.DestinationActorId );
-            if( actor == null )
-            {
-                throw new InvalidRPCCallException( "Received RPC but destination actor could not be found. Id: " + call.DestinationActorId + ", Method Id: " + call.MethodId );
-            }
+            Assert.IsTrue( actor != null, "Received RPC but destination actor could not be found. Id: " 
+                            + call.DestinationActorId + ", Method Id: " + call.MethodId );
 
             // Parse parameters.
             object[] parameters = new object[call.Parameters.Count];
@@ -827,37 +825,29 @@ namespace Nixin
                 if( call.Parameters[i].ParameterId == RPCParameterId.ActorId )
                 {
                     parameters[i] = ContainingWorld.GetReplicatedActor( ( UInt16 )call.Parameters[i].Data );
-                    if( parameters[i] == null )
-                    {
-                        throw new InvalidRPCCallException( "Received RPC but an actor passed as a parameter could not be found. Actor Id: " + call.Parameters[i].Data + ", Method Id: " + call.MethodId );
-                    }
+                    Assert.IsTrue( parameters[i] != null, "Received RPC but an actor passed as a parameter could not be found. Actor Id: " 
+                                   + call.Parameters[i].Data + ", Method Id: " + call.MethodId );
                     continue;
                 }
                 if( call.Parameters[i].ParameterId == RPCParameterId.ComponentId )
                 {
-                    var ids              = ( KeyValuePair<UInt16, byte> )call.Parameters[i].Data;
-                    var componentOwner   = ContainingWorld.GetReplicatedActor( ids.Key );
-                    if( componentOwner == null )
-                    {
-                        throw new InvalidRPCCallException( "Received RPC but an actor passed as a parameter could not be found. Actor Id: " + call.Parameters[i].Data + ", Method Id: " + call.MethodId );
-                    }
+                    KeyValuePair<UInt16, byte> ids              = ( KeyValuePair<UInt16, byte> )call.Parameters[i].Data;
+                    Actor                      componentOwner   = ContainingWorld.GetReplicatedActor( ids.Key );
+                    Assert.IsTrue( componentOwner != null, "Received RPC but an actor passed as a parameter could not be found. Actor Id: " 
+                                   + call.Parameters[i].Data + ", Method Id: " + call.MethodId );
 
-                    parameters[i]       = componentOwner.FindComponent( ids.Value );
-                    if( parameters[i] == null )
-                    {
-                        throw new InvalidRPCCallException( "Received RPC but a component passed as a parameter could not be found. Ids: " + call.Parameters[i].Data + ", Method Id: " + call.MethodId );
-                    }
+                    parameters[i] = componentOwner.FindComponent( ids.Value );
+                    Assert.IsTrue( parameters[i] != null, "Received RPC but a component passed as a parameter could not be found. Ids: "
+                                   + call.Parameters[i].Data + ", Method Id: " + call.MethodId );
                     continue;
                 }
                 parameters[i] = call.Parameters[i].Data;
             }
 
             // Use reflection to dynamically invoke the method.
-            var method = actor.FindRPCMethodById( call.MethodId );
-            if( method == null )
-            {
-                throw new InvalidRPCCallException( "Received RPC but destination method could not be found. Method id:" + call.MethodId );
-            }
+            RPCMethod method = actor.FindRPCMethodById( call.MethodId );
+            Assert.IsTrue( method != null, "Received RPC but destination method could not be found. Actor Id: " 
+                           + call.DestinationActorId + " Method id:" + call.MethodId );
             method.MethodInfo.Invoke( method.Owner, parameters );
         }
 

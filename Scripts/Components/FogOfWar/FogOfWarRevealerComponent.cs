@@ -31,10 +31,10 @@ namespace Nixin
         public override void OnUpdate( float deltaTime )
         {
             base.OnUpdate( deltaTime );
-            CreateMesh();
+          //  CreateMesh();
 
             // Don't want parents rotation.
-            fogClearingMeshObject.transform.rotation = Quaternion.identity;
+          //  fogClearingMeshObject.transform.rotation = Quaternion.identity;
         }
 
 

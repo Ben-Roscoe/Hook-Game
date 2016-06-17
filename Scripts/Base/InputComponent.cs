@@ -5,7 +5,7 @@ using System.Collections.Generic;
 using UnityEngine.Assertions;
 using System.Runtime.InteropServices;
 
-#if UNITY_EDITOR
+#if !NSHIPPING  && UNITY_EDITOR
 using UnityEditor;
 #endif
 
@@ -293,11 +293,16 @@ namespace Nixin
         {
             get
             {
-                return applicationHasFocus
-#if UNITY_EDITOR
-                    && EditorWindow.focusedWindow != null && EditorWindow.focusedWindow.titleContent.text == gameViewWindowTitle
+#if !NSHIPPING && UNITY_EDITOR
+                if( world == null )
+                {
+                    return applicationHasFocus && EditorWindow.focusedWindow != null && EditorWindow.focusedWindow.titleContent.text == gameViewWindowTitle;
+                }
+                else
 #endif
-                    ;
+                {
+                    return applicationHasFocus;
+                }
             }
         }
 
@@ -305,8 +310,8 @@ namespace Nixin
         // Private:
 
 
-            // Make sure we have the game view focusd in editor before doing any input.
-#if UNITY_EDITOR
+        // Make sure we have the game view focusd in editor before doing any input.
+#if !NSHIPPING
         private const string                        gameViewWindowTitle  = "Game";
 #endif
 

@@ -1,0 +1,2 @@
+﻿#define NDEBUG
+#undef NSHIPPING

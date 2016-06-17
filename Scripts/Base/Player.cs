@@ -102,10 +102,7 @@ namespace Nixin
             if( IsAuthority )
             {
                 MulticastEnableInput();
-                if( ContainingWorld.NetworkSystem.IsServer )
-                {
-                    ContainingWorld.RPC( MulticastEnableInput, RPCType.Multicast, this );
-                }
+                ContainingWorld.RPC( MulticastEnableInput, RPCType.Multicast, this );
             }
         }
 
@@ -115,10 +112,7 @@ namespace Nixin
             if( IsAuthority )
             {
                 MulticastDisableInput();
-                if( ContainingWorld.NetworkSystem.IsServer )
-                {
-                    ContainingWorld.RPC( MulticastDisableInput, RPCType.Multicast, this );
-                }
+                ContainingWorld.RPC( MulticastDisableInput, RPCType.Multicast, this );
             }
         }
 

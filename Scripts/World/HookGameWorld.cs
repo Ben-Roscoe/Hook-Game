@@ -13,6 +13,11 @@ namespace Nixin
         // Public:
 
 
+        // TODO: Remove this!
+        public const int startPort = 7000;
+        public const int endPort   = 7005;
+
+
         public MessageBoxUI CreateMessageBoxUI( string titleTextId, string bodyTextId, string okayButtonTextId, UICanvasActor canvas )
         {
             MessageBoxUI ui = ( MessageBoxUI )InstantiateUIActor( messageBoxUIPrefab, canvas );
@@ -77,7 +82,7 @@ namespace Nixin
             var gameMode    = ResourceSystem.GetNonMatchGameModeChunk( "MainMenuMode_Chunk" );
             mainMenuGameMap = new GameMap( mapMeta, gameMode );
 
-            NetworkSystem.StartClient();
+            //NetworkSystem.StartPeer();
             if( !useTestData )
             {
                 LoadMap( mainMenuGameMap );

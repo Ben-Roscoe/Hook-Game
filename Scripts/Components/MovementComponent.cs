@@ -56,6 +56,7 @@ namespace Nixin
             {
                 interpolatedPosition.From   = new Vector3( buffer.ReadFloat(), buffer.ReadFloat(), buffer.ReadFloat() );
                 interpolatedRotation.From   = new Quaternion( buffer.ReadFloat(), buffer.ReadFloat(), buffer.ReadFloat(), buffer.ReadFloat() );
+                //interpolatedPosition.From = transform.position;
             }
             else
             {

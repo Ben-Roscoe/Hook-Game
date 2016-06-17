@@ -23,8 +23,9 @@ namespace Nixin
                 return;
             }
             gameVarDelcs = GameVarDeclAttribute.GetCustomAttributes( managerClass.Type,
-                            typeof( GameVarDeclAttribute ) ).Cast<GameVarDeclAttribute>().ToList();
+                            typeof( GameVarDeclAttribute ) ).Cast<GameVarDeclAttribute>().OrderBy( x => x.Ordering ).ToList();
         }
+
 
 
         public string NameToken

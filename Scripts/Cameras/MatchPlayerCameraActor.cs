@@ -48,7 +48,7 @@ namespace Nixin
 
         public void Scroll( Vector2 direction, float deltaTime )
         {
-            var deltaPosition = Vector3.zero;
+            Vector3 deltaPosition = Vector3.zero;
 
             deltaPosition.x = scrollSpeed * deltaTime * direction.x;
             deltaPosition.z = scrollSpeed * deltaTime * direction.y;
@@ -84,7 +84,7 @@ namespace Nixin
             lerpPosition            = cameraPoint + projection;
 
             lerpStartTime           = Time.time;
-            isLerpingToPosition = true;
+            isLerpingToPosition     = true;
         }
 
 

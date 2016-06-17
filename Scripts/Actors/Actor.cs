@@ -233,7 +233,7 @@ namespace Nixin
         }
 
 
-#if UNITY_EDITOR
+#if !NSHIPPING
         public void CheckForComponentRemoval()
         {
             // Find a removal.

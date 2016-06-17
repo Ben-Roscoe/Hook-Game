@@ -180,9 +180,8 @@ namespace Nixin
         {
             buffer          = new NetBuffer();
             getTime         = NetTime.Now;
-            receivedTime    = msg.ReadTime( true );
+            timestamp       = msg.ReadTime( true );
             actorCount      = msg.ReadUInt16();
-            // receivedTime    = msg.ReceiveTime - ( msg.SenderConnection.AverageRoundtripTime / 2.0f );
 
             // RPC calls.
             byte callCount = msg.ReadByte();
@@ -277,11 +276,11 @@ namespace Nixin
         {
             get
             {
-                return receivedTime;
+                return timestamp;
             }
             set
             {
-                receivedTime = value;
+                timestamp = value;
             }
         }
 
@@ -326,7 +325,7 @@ namespace Nixin
         private List<SnapshotRPC>       calls               = new List<SnapshotRPC>();
         private List<ActorState>        actorStates         = new List<ActorState>();
 
-        private double                  receivedTime        = 0.0;
+        private double                  timestamp        = 0.0;
         private double                  getTime             = 0.0;
         private UInt16                  actorCount          = 0;
 

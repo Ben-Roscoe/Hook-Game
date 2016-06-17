@@ -92,13 +92,10 @@ namespace Nixin
 
         private void OnHostButtonPressed()
         {
-            // End client.
-            ContainingWorld.NetworkSystem.Shutdown();
-
             // Start a server.
-            ContainingWorld.StartServer( 25000 );
+            ContainingWorld.NetworkSystem.StartServer();
 
-            var gameManager = ContainingWorld.GameManager as MainMenuGameManager;
+            MainMenuGameManager gameManager = ContainingWorld.GameManager as MainMenuGameManager;
             gameManager.CreateNetworkGame( gameNameFieldt.text );
         }
     }

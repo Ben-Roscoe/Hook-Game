@@ -61,7 +61,7 @@ namespace Nixin
         private HealRadiusOvertimeAbilityInstance   healRadiusAbilityInstance = null;
 
 
-#if UNITY_EDITOR
+#if !NSHIPPING
         private void OnDrawGizmosSelected()
         {
             var oldColour = Gizmos.color;

@@ -5,7 +5,7 @@ using System.Text;
 using UnityEngine;
 using UnityEngine.Serialization;
 
-#if UNITY_EDITOR
+#if !NSHIPPING && UNITY_EDITOR
 using UnityEditor;
 #endif
 

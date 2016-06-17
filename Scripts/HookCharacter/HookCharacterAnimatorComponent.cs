@@ -75,7 +75,7 @@ namespace Nixin
 
             if( Owner != null && Owner.IsAuthority )
             {
-                estimatedVelocityLength = Vector3.Distance( hookCharacter.transform.position, lastCharacterPosition ) / deltaTime;
+                estimatedVelocityLength = hookCharacter.NavigationComponent.Agent.velocity.magnitude;
                 lastCharacterPosition = hookCharacter.transform.position;
             }
 

@@ -39,11 +39,11 @@ namespace Nixin
 
         public void Read( NetBuffer buffer, bool isFuture, World world )
         {
-            var oldMapName  = map == null ? "" : map.AssetName;
-            var oldModeName = mode == null ? "" : mode.AssetName;
-
-            var newMapName  = buffer.ReadString( oldMapName, isFuture );
-            var newModeName = buffer.ReadString( oldModeName, isFuture );
+            string oldMapName  = map == null ? "" : map.AssetName;
+            string oldModeName = mode == null ? "" : mode.AssetName;
+            
+            string newMapName  = buffer.ReadString( oldMapName, isFuture );
+            string newModeName = buffer.ReadString( oldModeName, isFuture );
 
             // Change of map.
             if( newMapName != "" && newMapName != oldMapName )
@@ -93,14 +93,17 @@ namespace Nixin
             }
             set
             {
+                GameModeChunk oldMode = mode;
                 mode = value;
-                SetExtension();
-                if( mode != null )
+                
+                if( mode != oldMode && mode != null )
                 {
+                    SetExtension();
+
                     vars = new List<GameVar>();
-                    foreach( var decl in mode.GameVarDelcs )
+                    for( int i = 0; i < mode.GameVarDelcs.Count; ++i )
                     {
-                        vars.Add( new GameVar( decl ) );
+                        vars.Add( new GameVar( mode.GameVarDelcs[i] ) );
                     }
                 }
             }

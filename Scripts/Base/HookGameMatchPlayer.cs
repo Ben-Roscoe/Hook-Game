@@ -29,7 +29,6 @@ namespace Nixin
             base.OnActorInitialise( replicates, networkOwner, acceptsNewConnections, responsibleController );
 
             RegisterRPC<Vector3>( ServerFireHook );
-            RegisterRPC<Vector3, Vector3>( ServerMoveToMouseClick );
             RegisterRPC<Vector3>( ServerMoveToPosition );
 
             if( CameraActor != null )
@@ -124,19 +123,19 @@ namespace Nixin
         {
             base.WriteSnapshot( buffer );
 
-#if NIXIN_DEBUG
+//#if NDEBUG
             buffer.Write( printInputTiming );
             buffer.Write( serverInputReadTime );
             printInputTiming = false;
-#endif
+//#endif
         }
 
-        
+
         public override void ReadSnapshot( NetBuffer buffer, bool isFuture )
         {
             base.ReadSnapshot( buffer, isFuture );
 
-#if NIXIN_DEBUG
+//#if NDEBUG
             printInputTiming    = buffer.ReadBoolean();
             serverInputReadTime = buffer.ReadDouble( serverInputReadTime, isFuture );
             if( printInputTiming && isFuture )
@@ -144,7 +143,7 @@ namespace Nixin
                 NDebug.PrintSubsystemDebug( NDebug.DebugSubsystem.Networking, Time.time + ": Click took: " + ( NetTime.Now - inputTime ) + ", Seen took: " + 
                     ( serverInputReadTime - inputTime ) + ", Get took: " + ( ContainingWorld.NetworkSystem.CurrentSnapshot.GetTime - inputTime ) );
             }
-#endif
+//#endif
         }
 
 
@@ -200,11 +199,11 @@ namespace Nixin
         private MatchPlayerCameraActor                                  matchPlayerCamera       = null;
 
         // Debug information for input delay.
-#if NIXIN_DEBUG
+//#if NIXIN_DEBUG
         private bool    printInputTiming        = false;
         private double  inputTime               = 0.0;
         private double  serverInputReadTime     = 0.0;
-#endif
+//#endif
 
         private void FocusCameraOnHookCharacter()
         {
@@ -251,23 +250,11 @@ namespace Nixin
                 return;
             }
 
-#if NIXIN_DEBUG
+//#if NIXIN_DEBUG
             inputTime         = NetTime.Now;
-#endif
+//#endif
             var ray           = CameraActor.CameraComponent.ScreenPointToRay( Input.mousePosition );
             FindSelection( ray.origin, ray.direction );
-        }
-
-
-        private void ServerMoveToMouseClick( Vector3 worldPosition, Vector3 worldDirection )
-        {
-#if NIXIN_DEBUG
-            printInputTiming = true;
-            if( Relevancies.Count > 0 )
-            {
-                serverInputReadTime = Relevancies[0].Client.NetConnection.GetRemoteTime( NetTime.Now );
-            }
-#endif
         }
 
 
@@ -290,6 +277,13 @@ namespace Nixin
                 return;
             }
             hookCharacterOwnerComponent.HookCharacter.NavigateToDestination( pos );
+
+            // DEBUG.
+            printInputTiming = true;
+            if( Relevancies.Count > 0 )
+            {
+                serverInputReadTime = Relevancies[0].Client.NetConnection.GetRemoteTime( NetTime.Now );
+            }
         }
 
 

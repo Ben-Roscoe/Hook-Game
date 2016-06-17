@@ -35,23 +35,23 @@ namespace Nixin
         public override void OnClientDisconnect( ClientState client )
         {
             base.OnClientDisconnect( client );
-            var gameState = ContainingWorld.GameState as MainMenuGameState;
+            MainMenuGameState gameState = ContainingWorld.GameState as MainMenuGameState;
         }
 
 
         public void CreateNetworkGame( string name )
         {
-            var gameState = ContainingWorld.GameState as MainMenuGameState;
+            MainMenuGameState gameState = ContainingWorld.GameState as MainMenuGameState;
             gameState.NetworkGameMetaData.Name = name;   
         }
 
 
-        public override void HandleNetDiscoveryRequest( NetIncomingMessage msg, NetOutgoingMessage response )
+        public override void HandleNetDiscoveryRequest( NetIncomingMessage msg, NetBuffer response )
         {
             base.HandleNetDiscoveryRequest( msg, response );
 
-            var gameState = ContainingWorld.GameState as MainMenuGameState;
-            var entryMeta = gameState.NetworkGameMetaData.GetEntryMetaData();
+            MainMenuGameState        gameState = ContainingWorld.GameState as MainMenuGameState;
+            NetworkGameEntryMetaData entryMeta = gameState.NetworkGameMetaData.GetEntryMetaData();
             entryMeta.Write( response );
         }
 

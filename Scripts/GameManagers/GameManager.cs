@@ -30,7 +30,7 @@ namespace Nixin
         }
 
 
-        public virtual void HandleNetDiscoveryRequest( NetIncomingMessage msg, NetOutgoingMessage response )
+        public virtual void HandleNetDiscoveryRequest( NetIncomingMessage msg, NetBuffer response )
         {
         }
 

@@ -186,7 +186,7 @@ namespace Nixin
             {
                 return bundleName;
             }
-#if UNITY_EDITOR
+#if !NSHIPPING
             set
             {
                 bundleName = value;
@@ -201,7 +201,7 @@ namespace Nixin
             {
                 return entries;
             }
-#if UNITY_EDITOR
+#if !NSHIPPING
             set
             {
                 entries = value;
@@ -216,7 +216,7 @@ namespace Nixin
             {
                 return hash;
             }
-#if UNITY_EDITOR
+#if !NSHIPPING
             set
             {
                 hash = value;
@@ -379,7 +379,7 @@ namespace Nixin
             {
                 return isChunk;
             }
-#if UNITY_EDITOR
+#if !NSHIPPING
             set
             {
                 isChunk = value;

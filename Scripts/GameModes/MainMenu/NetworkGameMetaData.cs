@@ -117,7 +117,7 @@ namespace Nixin
 
             // Get the map's icon. We might not have this map, which means we might not have the icon
             // so check.
-            var mapChunk        = resourceSystem.GetMatchMapChunk( mapName );
+            MapChunk mapChunk        = resourceSystem.GetMatchMapChunk( mapName );
             if( mapChunk != null )
             {
                 mapIcon = mapChunk.Icon;

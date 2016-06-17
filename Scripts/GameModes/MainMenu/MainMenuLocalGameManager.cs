@@ -29,7 +29,7 @@ namespace Nixin
         {
             base.ReadNetDiscoveryResponse( msg );
 
-            var entry = new NetworkGameEntryMetaData( msg, ContainingWorld.ResourceSystem );
+            NetworkGameEntryMetaData entry = new NetworkGameEntryMetaData( msg, ContainingWorld.ResourceSystem );
             entryMetaDatas.Add( entry );
 
             OnGetRunningGameMetaDataComplete.Invoke( entryMetaDatas );
@@ -38,8 +38,8 @@ namespace Nixin
 
         public ConnectToServerRequest JoinLobby( NetworkGameEntryMetaData lobby )
         {
-            var request = new ConnectToServerRequest( lobby.EndPoint.Address.ToString(), lobby.EndPoint.Port );
-            ContainingWorld.ConnectToServer( request );
+            ConnectToServerRequest request = new ConnectToServerRequest( lobby.EndPoint.Address.ToString(), lobby.EndPoint.Port );
+            ContainingWorld.NetworkSystem.ConnectToServer( request );
             return request;
         }
 
@@ -47,7 +47,12 @@ namespace Nixin
         public void GetRunningGameMetaData()
         {
             entryMetaDatas.Clear();
-            ContainingWorld.NetworkSystem.SendNetworkDiscoveryRequest( 25000 );
+
+            // TODO: Remove this!
+            for( int i = HookGameWorld.startPort; i < HookGameWorld.endPort; ++i )
+            {
+                ContainingWorld.NetworkSystem.SendNetworkDiscoveryRequest( i );
+            }
         }
 
 

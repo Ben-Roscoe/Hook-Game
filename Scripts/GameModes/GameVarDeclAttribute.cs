@@ -14,11 +14,14 @@ namespace Nixin
 
         public string Name { get; set; }
         public string NameToken { get; set; }
+        public int    Ordering { get; set; }
 
-        public GameVarDeclAttribute( string name, string nameToken )
+        public GameVarDeclAttribute( int ordering, string name, string nameToken )
         {
             this.Name = name;
             this.NameToken = nameToken;
+
+            this.Ordering = ordering;
         }
     }
 
@@ -31,8 +34,8 @@ namespace Nixin
 
         public bool   DefaultValue { get; set; }
         
-        public BoolGameVarDeclAttribute( string name, string nameToken, bool defaultValue )
-            : base( name, nameToken )
+        public BoolGameVarDeclAttribute( int ordering, string name, string nameToken, bool defaultValue )
+            : base( ordering, name, nameToken )
         {
             this.DefaultValue = defaultValue;
         }
@@ -52,8 +55,8 @@ namespace Nixin
 
 
 
-        public IntGameVarDeclAttribute( string name, string nameToken, int min, int max, int defaultValue )
-            : base( name, nameToken )
+        public IntGameVarDeclAttribute( int ordering, string name, string nameToken, int min, int max, int defaultValue )
+            : base( ordering, name, nameToken )
         {
             this.DefaultValue = defaultValue;
             this.Min = min;
@@ -75,8 +78,8 @@ namespace Nixin
 
 
 
-        public FloatGameVarDeclAttribute( string name, string nameToken, float min, float max, float defaultValue )
-            : base( name, nameToken )
+        public FloatGameVarDeclAttribute( int ordering, string name, string nameToken, float min, float max, float defaultValue )
+            : base( ordering, name, nameToken )
         {
             this.DefaultValue = defaultValue;
             this.Min = min;

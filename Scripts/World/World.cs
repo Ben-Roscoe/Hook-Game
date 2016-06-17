@@ -37,7 +37,7 @@ namespace Nixin
             Assert.IsTrue( !IsLoadingMap && next.IsValid() );
 
             // Let's create the new resource batch.
-            var nextBatch = new GameMapBatchLoader( resourceSystem, next.Map, next.Mode );
+            GameMapBatchLoader nextBatch = new GameMapBatchLoader( resourceSystem, next.Map, next.Mode );
 
             currentMapTransition    = new MapTransition( currentGameMap, next, mapResourceBatch, nextBatch );
             currentMapTransition.AddProgressCallback( TransitionMapLoaderProgressCallback );
@@ -85,10 +85,6 @@ namespace Nixin
         public virtual void OnWorldApplicationQuit()
         {
             worldInputComponent.Uninitialise();
-            if( networkSendTimer != null )
-            {
-                networkSendTimer.Stop();
-            }
             if( NetworkSystem != null )
             {
                 NetworkSystem.Shutdown();
@@ -121,83 +117,62 @@ namespace Nixin
         {
             if( GameManager != null )
             {
-                NetOutgoingMessage response         = NetworkSystem.NetPeer.CreateMessage();
-                var                initialSize      = response.LengthBits;
+                NetBuffer          response         = NetworkSystem.NetPeer.CreateMessage( 0 );
+                int                initialSize      = response.LengthBits;
                 GameManager.HandleNetDiscoveryRequest( msg, response );
 
                 // Send a response if the message is actually needed.
                 if( response.LengthBits > initialSize )
                 {
-                    NetworkSystem.SendNetworkDiscoveryResponse( response, msg.SenderEndPoint );
+                    NetOutgoingMessage responseMsg = NetworkSystem.NetPeer.CreateMessage( response.LengthBytes );
+                    responseMsg.Write( response.Data );
+                    NetworkSystem.SendNetworkDiscoveryResponse( responseMsg, msg.SenderEndPoint );
                 }
             }
         }
 
 
-        public virtual void StartServer( int port )
+        public virtual void OnConnected( NetConnection connection )
         {
-            Assert.IsTrue( !NetworkSystem.IsConnected );
-            networkSystem.StartServer( port );
-            StartNetworkTimer();
-        }
-
-
-        public virtual void ShutdownServer()
-        {
-            Assert.IsTrue( NetworkSystem.IsServer );
-            NetworkSystem.Shutdown();
-        }
-
-
-        public virtual void ConnectToServer( ConnectToServerRequest request )
-        {
-            networkSystem.ConnectToServer( request );
-        }
-
-
-        public virtual void DisconnectFromServer()
-        {
-            Assert.IsTrue( NetworkSystem.IsConnected && NetworkSystem.IsClient );
-            NetworkSystem.DisconnectFromServer();
-        }
-
-
-        public virtual void OnClientConnected( ClientState client )
-        {
-            client.SnapshotBuffer.CurrentSnapshot.AddRPC( latestLoadMapCall );
-        }
-
-
-        public virtual void OnClientDisconnect( ClientState client )
-        {
-            if( GameManager != null )
+            if( networkSystem.CurrentNetType == NetType.Server )
             {
-                GameManager.OnClientDisconnect( client );
+                ClientState client = networkSystem.GetClientStateFromConnection( connection );
+                client.SnapshotBuffer.CurrentSnapshot.AddRPC( latestLoadMapCall );
             }
-            pendingClientLoadResults.RemoveAll( x => x.Client == client );
-            DestroyReplicatedActorsWithOwner( client );
+            else if( networkSystem.CurrentNetType == NetType.Client )
+            {
+                BecomeClient();
+            }
+        }
+
+
+        public virtual void OnDisconnected( NetConnection connection )
+        {
+            // TODO: Stop network timer.
+            if( networkSystem.CurrentNetType == NetType.Server )
+            {
+                ClientState client = networkSystem.GetClientStateFromConnection( connection );
+
+                if( GameManager != null )
+                {
+                    GameManager.OnClientDisconnect( client );
+                }
+                pendingClientLoadResults.RemoveAll( x => x.Client == client );
+                DestroyReplicatedActorsWithOwner( client );
+            }
+            else if( networkSystem.CurrentNetType == NetType.Client )
+            {
+                BecomeServer();
+            }
         }
 
 
         public virtual void OnPreConnectToServer( NetConnection serverConnection )
         {
-            BecomeClient();
             if( LocalGameManager != null )
             {
                 LocalGameManager.OnConnectToServer();
             }
-        }
-
-
-        public virtual void OnConnectToServer( NetConnection serverConnection )
-        {
-
-        }
-
-
-        public virtual void OnDisconnectFromServer( NetConnection serverConnection )
-        {
-            BecomeServer();
         }
 
 
@@ -645,9 +620,30 @@ namespace Nixin
             // World object should persist throughout the entire game.
             DontDestroyOnLoad( gameObject );
 
+            int port = 0;
+#if !NSHIPPING
+            if( Application.isEditor )
+            {
+                port = 7000;
+            }
+            else
+#endif
+            {
+                string[] args = System.Environment.GetCommandLineArgs();
+                for( int i = 1; i < args.Length; i += 2 )
+                {
+                    if( args[i] == "+nport" )
+                    {
+                        port = int.Parse( args[i + 1] );
+                        break;
+                    }
+                }
+            }
+
+
             // Start systems.
             consoleSystem       = new ConsoleSystem( this );
-            networkSystem       = new NetworkSystem( this, AppId );
+            networkSystem       = new NetworkSystem( this, AppId, port );
             timerSystem         = new TimerSystem( this );
             resourceSystem      = new ResourceSystem( this, DataPath );
             localisationSystem  = new LocalisationSystem( this, LocalisationPath );
@@ -683,17 +679,7 @@ namespace Nixin
         protected virtual void WorldUpdate()
         {
             networkSystem.ReadUpdate();
-            if( NetworkSystem != null && NetworkSystem.NetPeer != null )
-            {
-                if( NetworkSystem.IsAuthoritative )
-                {
-                    NetworkSystem.ExecuteServerCommands();
-                }
-                else
-                {
-                    NetworkSystem.CheckForSnapshotActivation();
-                }
-            }
+            networkSystem.Update();
 
             // Do world update.
             WorldInputComponent.UpdateInput( Time.deltaTime );
@@ -723,23 +709,15 @@ namespace Nixin
             {
                 lastFocusedUIActor.UpdateInput( Time.deltaTime );
             }
+
+            NetworkSystem.TrySendUpdate( Time.deltaTime );
         }
 
 
         protected virtual void WorldFixedUpdate()
         {
             networkSystem.ReadUpdate();
-            if( NetworkSystem != null && NetworkSystem.NetPeer != null )
-            {
-                if( NetworkSystem.IsAuthoritative )
-                {
-                    NetworkSystem.ExecuteServerCommands();
-                }
-                else
-                {
-                    NetworkSystem.CheckForSnapshotActivation();
-                }
-            }
+            networkSystem.Update();
 
             // Do world fixed update.
             fixedUpdateGroup.UpdateFixed();
@@ -893,9 +871,6 @@ namespace Nixin
 
         private List<ClientGameMapLoadResult>   pendingClientLoadResults = new List<ClientGameMapLoadResult>();
 
-        private MicroTimer                  networkSendTimer            = null;
-        private Mutex                       networkSendMutex            = new Mutex();
-
         private EventSystem                 eventSystem                 = null;
         private UICanvasActor               defaultCanvas               = null;
         private ConsoleUI                   consoleUI                   = null;
@@ -1002,59 +977,15 @@ namespace Nixin
         }
 
 
-        private void StartNetworkTimer()
-        {
-            if( networkSendTimer == null )
-            {
-                networkSendTimer = new MicroTimer( ( long )( ( NetworkSystem.NetworkSendPeriod * 1000.0f ) * 1000.0f ) );
-                networkSendTimer.MicroTimerElapsed += NetworkSendUpdate;
-            }
-
-            networkSendTimer.Start();
-        }
-
-
-        private void EndNetworkTimer()
-        {
-            if( networkSendTimer == null )
-            {
-                return;
-            }
-
-            networkSendTimer.Stop();
-        }
-
-
-        private void NetworkSendUpdate( object sender, MicroTimerEventArgs e )
-        {
-            if( networkSendMutex.WaitOne() )
-            {
-                if( NetworkSystem.NetPeer.Status == NetPeerStatus.Running )
-                {
-                    NetworkSystem.SendUpdate();
-                }
-                networkSendMutex.ReleaseMutex();
-            }
-        }
-
-
         private void Update()
         {
-            if( networkSendMutex.WaitOne() )
-            {
-                WorldUpdate();
-                networkSendMutex.ReleaseMutex();
-            }
+            WorldUpdate();
         }
 
 
         private void FixedUpdate()
         {
-            if( networkSendMutex.WaitOne() )
-            {
-                WorldFixedUpdate();
-                networkSendMutex.ReleaseMutex();
-            }
+            WorldFixedUpdate();
         }
 
 

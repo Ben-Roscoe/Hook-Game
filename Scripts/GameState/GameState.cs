@@ -54,7 +54,7 @@ namespace Nixin
             }
 
             // New player.
-            StatsBase newStats = ( StatsBase )ContainingWorld.InstantiateReplicatedActor( statsPrefab, Vector3.zero, Quaternion.identity, ContainingWorld.NetworkSystem.ServerId, true, controller );
+            StatsBase newStats = ( StatsBase )ContainingWorld.InstantiateReplicatedActor( statsPrefab, Vector3.zero, Quaternion.identity, ContainingWorld.NetworkSystem.AuthorityId, true, controller );
             AddStats( newStats );
 
             if( ContainingWorld.GameManager != null )

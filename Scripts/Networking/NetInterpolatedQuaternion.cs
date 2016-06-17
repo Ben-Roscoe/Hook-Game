@@ -26,22 +26,13 @@ namespace Nixin
             }
 
 
-            double tyme = world.NetworkSystem.CurrentClientInterpolationTime;
-            double styp = NetTime.Now;
             double currentStepDelta = ( world.NetworkSystem.CurrentClientInterpolationTime - world.NetworkSystem.CurrentSnapshot.Timestamp );
             double total            = 0.0;
-            if( world.NetworkSystem.CurrentSnapshot != world.NetworkSystem.NextSnapshot )
-            {
-                total = world.NetworkSystem.NextSnapshot.Timestamp - world.NetworkSystem.CurrentSnapshot.Timestamp;
-            }
-            else
-            {
-                total = world.NetworkSystem.NetworkSendPeriod;
-            }
+            total = world.NetworkSystem.NextSnapshot.Timestamp - world.NetworkSystem.CurrentSnapshot.Timestamp;
+            float  t                = ( float )( currentStepDelta / ( total ) );
 
-            float  t                = ( float )( currentStepDelta / ( total ) );// Mathf.Clamp( , 0.0f, 1.0f );
-            t = Mathf.Clamp( t, 0.0f, 1.2f );
-            return Quaternion.LerpUnclamped( From, To, t );
+            Quaternion result = Quaternion.LerpUnclamped( From, To, t );
+            return result;
         }
     }
 }
